@@ -1,0 +1,1 @@
+curl -L "https://universe.roboflow.com/ds/yhrGVHhv27?key=0S6a4xvYxj" > roboflow.zip; mkdir dataset; cd dataset; unzip ../roboflow.zip; rm ../roboflow.zip;
