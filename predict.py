@@ -12,7 +12,13 @@ from datetime import datetime
 TEST_DIR = os.path.join(".", "test")
 video_path = os.path.join(TEST_DIR, "demo.mp4")
 video_path_out = f'{video_path}_out.mp4'
-model_path = os.path.join(".", "models", "plate_detector.pt")
+
+# India #1 plate detector
+# model_path = os.path.join(".", "models", "plate_detector_india_1.pt")
+# International plate detector
+# model_path = os.path.join(".", "models", "plate_detector_intl.pt")
+# India #2 plate detector
+model_path = os.path.join(".", "models", "plate_detector_india_2.pt")
 
 # Initialize Paddle OCR
 ocr = PaddleOCR(use_angle_cls=True, lang='en')
