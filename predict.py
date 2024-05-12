@@ -1,16 +1,21 @@
 import os
 import re
 import sqlite3
+
 import cv2
-import easyocr
+from paddleocr import PaddleOCR
 from ultralytics import YOLO
 from datetime import datetime
 
+
 # Define paths
+TEST_DIR = os.path.join(".", "test")
+video_path = os.path.join(TEST_DIR, "demo.mp4")
+video_path_out = f'{video_path}_out.mp4'
 model_path = os.path.join(".", "models", "plate_detector.pt")
 
-# Initialize EasyOCR
-reader = easyocr.Reader(['en'])
+# Initialize Paddle OCR
+ocr = PaddleOCR(use_angle_cls=True, lang='en')
 
 # Connect to SQLite database (or create if not exists)
 conn = sqlite3.connect('plates.db')
@@ -28,24 +33,18 @@ cur.execute('''CREATE TABLE IF NOT EXISTS plates (
 # Commit changes and close connection
 conn.commit()
 
+cap = cv2.VideoCapture(video_path)
+ret, frame = cap.read()
+H, W, _ = frame.shape
+out = cv2.VideoWriter(video_path_out, cv2.VideoWriter_fourcc(
+    *'MP4V'), int(cap.get(cv2.CAP_PROP_FPS)), (W, H))
+
 # Load a model
 model = YOLO(model_path)  # load a custom model
 
 threshold = 0.5
 
-# Initialize webcam
-cap = cv2.VideoCapture(0)
-
-# Define the codec and create VideoWriter object
-fourcc = cv2.VideoWriter_fourcc(*'XVID')
-output_video = cv2.VideoWriter('output.avi', fourcc, 20.0, (640, 480))
-
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        break
-
-    H, W, _ = frame.shape
+while ret:
 
     results = model(frame)[0]
 
@@ -56,22 +55,27 @@ while True:
             cv2.rectangle(frame, (int(x1), int(y1)),
                           (int(x2), int(y2)), (0, 255, 0), 4)
             cv2.putText(frame, results.names[int(class_id)].upper(), (int(x1), int(y1 - 10)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.3, (0, 255, 0), 3, cv2.LINE_AA)  # License plate text in the box
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.3, (0, 255, 0), 3, cv2.LINE_AA)
 
             # Crop the detected plate region
             plate_region = frame[int(y1):int(y2), int(x1):int(x2)]
 
+            # Convert plate region to grayscale
+            gray_plate_region = cv2.cvtColor(plate_region, cv2.COLOR_BGR2GRAY)
+
             # Perform OCR on the plate region
-            result = reader.readtext(plate_region)
+            result = ocr.ocr(gray_plate_region, det=False)
 
             if result:
                 # Extract the recognized text
-                recognized_text = result[0][1]
+                recognized_text, confidence = result[0][0]
+
+                recognized_text = recognized_text.replace(" ", "")
 
                 result_is_plate = re.match(
-                    r'^[A-Z]-[A-Z|0-9]{3}-[A-Z|0-9]{2}$', recognized_text)
+                    r'^[A-Z]{2}[0-9]{2}[A-Z]{2}[0-9]{4}$', recognized_text)
 
-                # Draw the recognized text on the frame
+               # Draw the recognized text on the frame
                 cv2.putText(frame, recognized_text, (int(x1), int(y2 + 30)),
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
                 if result_is_plate and score > 0.95:
@@ -90,15 +94,11 @@ while True:
                         cur.execute("INSERT INTO plates (plate_number, first_seen, last_seen) VALUES (?, ?, ?)",
                                     (plate_number, timestamp, timestamp))
                     conn.commit()
+                    # Add plate number to log string
+                    log_string += f"Plate: {plate_number}, "
 
-    # Write the frame into the output video
-    output_video.write(frame)
+    out.write(frame)
+    ret, frame = cap.read()
 
-    # Break the loop if 'q' key is pressed
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-# Release the webcam, VideoWriter, and close OpenCV windows
 cap.release()
-output_video.release()
-cv2.destroyAllWindows()
+out.release()

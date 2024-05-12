@@ -1,9 +1,7 @@
 __pycache__/
 .venv/
 dataset/
-models/
 runs/
-/test
 
 *.log
 
