@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>FastAPI SocketIO</title>
+  </head>
+  <body>
+    <div id="container">
+      <canvas style="display: none" id="canvasOutput"></canvas>
+      <video autoplay="true" id="videoElement"></video>
+    </div>
+
+    <div class="video">
+      <img id="image" />
+    </div>
+
+    <script
+      src="https://cdn.socket.io/4.7.5/socket.io.min.js"
+      integrity="sha384-2huaZvOR9iDzHqslqwpR87isEmrfxqyWOF7hr7BY6KG0+hVKLoEXMPUJw3ynWuhO"
+      crossorigin="anonymous"
+    ></script>
+
+    <script src="static/opencv.js" type="text/javascript"></script>
+
+    <script>
+      var socket = io("http://127.0.0.1:8000");
+
+      socket.on("connect", function () {
+        console.log("Connected...!", socket.connected);
+      });
+
+      const video = document.querySelector("#videoElement");
+      const canvas = document.getElementById("canvasOutput");
+
+      video.width = 500;
+      video.height = 375;
+
+      try {
+        if (navigator.mediaDevices.getUserMedia) {
+          navigator.mediaDevices
+            .getUserMedia({
+              video: {
+                facingMode: "environment",
+              },
+              audio: false,
+            })
+            .then(function (stream) {
+              video.srcObject = stream;
+              video.play();
+              captureAndSend();
+            })
+            .catch(function (err0r) {
+              console.log(err0r);
+              console.log("Something went wrong!");
+            });
+        }
+      } catch (err) {
+        alert(err.message);
+      }
+
+      function captureAndSend() {
+        let src = new cv.Mat(video.height, video.width, cv.CV_8UC4);
+        let dst = new cv.Mat(video.height, video.width, cv.CV_8UC1);
+        let cap = new cv.VideoCapture(video);
+
+        const FPS = 22;
+
+        function sendImage() {
+          cap.read(src);
+          var type = "image/png";
+          cv.imshow(canvas, src);
+          var data = canvas.toDataURL(type);
+          data = data.replace("data:" + type + ";base64,", ""); // Remove junk at the beginning
+          socket.emit("image", data);
+        }
+
+        // Listen for response from the server before sending the next image
+        socket.on("response_back", function (image) {
+          const image_id = document.getElementById("image");
+          image_id.src = image;
+          setTimeout(sendImage, 1000 / FPS); // Send the next image after a delay
+        });
+
+        // Initial call to start the loop
+        sendImage();
+      }
+    </script>
+  </body>
+</html>
